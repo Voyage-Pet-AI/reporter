@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { loadConfig, initConfig, configExists, getConfigPath, resolveSecret, type SlackOAuthInit } from "./config.js";
+import { loadConfig, initConfig, configExists, getConfigPath, resolveSecret, updateSlackConfig, type SlackOAuthInit } from "./config.js";
 import { getEnabledServers } from "./mcp/registry.js";
 import { MCPClientManager } from "./mcp/client.js";
 import { AnthropicProvider } from "./llm/anthropic.js";
@@ -54,6 +54,7 @@ async function cmdInit() {
     process.stderr.write("\nSet up Slack with OAuth? (y/N) ");
     const slackAnswer = await readLine();
     if (slackAnswer.trim().toLowerCase() === "y") {
+      printSlackSetupGuide();
       process.stderr.write("  Slack app client ID: ");
       const clientId = (await readLine()).trim();
       if (!clientId) {
@@ -116,8 +117,52 @@ async function cmdInit() {
       log(`Set ${config.slack.client_secret_env} env var, then run "reporter auth slack".`);
     }
   } else {
-    log("Slack: not configured — add client_id to [slack] in config, then run \"reporter auth slack\"");
+    process.stderr.write("\nSet up Slack with OAuth? (y/N) ");
+    const slackAnswer = await readLine();
+    if (slackAnswer.trim().toLowerCase() === "y") {
+      printSlackSetupGuide();
+      process.stderr.write("  Slack app client ID: ");
+      const clientId = (await readLine()).trim();
+      if (!clientId) {
+        error("Client ID is required. Skipping Slack setup.");
+      } else {
+        process.stderr.write("  Client secret env var [SLACK_CLIENT_SECRET]: ");
+        const secretEnv = (await readLine()).trim() || "SLACK_CLIENT_SECRET";
+        process.stderr.write("  Channels (comma-separated, e.g. #general, #eng): ");
+        const channelsRaw = (await readLine()).trim();
+        const channels = channelsRaw
+          ? channelsRaw.split(",").map((c) => c.trim()).filter(Boolean)
+          : [];
+        const slackInit: SlackOAuthInit = { client_id: clientId, client_secret_env: secretEnv, channels };
+        updateSlackConfig(slackInit);
+        log("Slack config saved.");
+
+        const clientSecret = resolveSecret(secretEnv);
+        if (clientSecret) {
+          process.stderr.write("\nRun Slack OAuth now? (Y/n) ");
+          const authAnswer = await readLine();
+          if (authAnswer.trim().toLowerCase() !== "n") {
+            await performSlackOAuth(clientId, clientSecret);
+          } else {
+            log('Run "reporter auth slack" later to complete Slack setup.');
+          }
+        } else {
+          log(`Set ${secretEnv} env var, then run "reporter auth slack".`);
+        }
+      }
+    }
   }
+}
+
+function printSlackSetupGuide() {
+  console.error(
+    `\n  To get your Slack credentials:\n` +
+    `  1. Create a Slack app at https://api.slack.com/apps → "Create New App"\n` +
+    `  2. Go to "OAuth & Permissions" → add redirect URL: http://localhost:8371/callback\n` +
+    `  3. Under "Scopes" → "Bot Token Scopes", add: channels:history, channels:read, users:read, search:read\n` +
+    `  4. Go to "Basic Information" → copy "Client ID" and "Client Secret"\n` +
+    `  5. Set the secret as an env var: export SLACK_CLIENT_SECRET="your-secret"\n`
+  );
 }
 
 function readLine(): Promise<string> {
@@ -230,7 +275,9 @@ async function cmdAuthSlack() {
     error(
       `Missing client_id in [slack] config.\n` +
       `  1. Create a Slack app at https://api.slack.com/apps\n` +
-      `  2. Add client_id to ~/reporter/config.toml under [slack]`
+      `  2. Under "OAuth & Permissions", add redirect URL: http://localhost:8371/callback\n` +
+      `  3. Add bot token scopes: channels:history, channels:read, users:read, search:read\n` +
+      `  4. Copy "Client ID" from "Basic Information" into ~/reporter/config.toml under [slack]`
     );
     process.exit(1);
   }
@@ -238,8 +285,10 @@ async function cmdAuthSlack() {
   if (!config.slack.client_secret_env) {
     error(
       `Missing client_secret_env in [slack] config.\n` +
-      `  Add client_secret_env = "SLACK_CLIENT_SECRET" to [slack] in config\n` +
-      `  and set the SLACK_CLIENT_SECRET environment variable.`
+      `  1. Copy "Client Secret" from your app's "Basic Information" page:\n` +
+      `     https://api.slack.com/apps\n` +
+      `  2. Set it as an env var: export SLACK_CLIENT_SECRET="xoxe-..."\n` +
+      `  3. Add client_secret_env = "SLACK_CLIENT_SECRET" to [slack] in config`
     );
     process.exit(1);
   }

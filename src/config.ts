@@ -172,3 +172,13 @@ export function initConfig(slackOAuth?: SlackOAuthInit): string {
   writeFileSync(CONFIG_PATH, config);
   return `Config created at ${CONFIG_PATH}\nEdit it to add your API keys and preferences.`;
 }
+
+export function updateSlackConfig(slack: SlackOAuthInit): void {
+  const raw = readFileSync(CONFIG_PATH, "utf-8");
+  const channelsStr = JSON.stringify(slack.channels);
+  const updated = raw.replace(
+    /\[slack\][\s\S]*?(?=\n\[|$)/,
+    `[slack]\nenabled = true\nclient_id = "${slack.client_id}"\nclient_secret_env = "${slack.client_secret_env}"\nchannels = ${channelsStr}\n`
+  );
+  writeFileSync(CONFIG_PATH, updated);
+}
