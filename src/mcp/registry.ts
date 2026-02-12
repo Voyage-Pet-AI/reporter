@@ -1,4 +1,5 @@
 import type { Config } from "../config.js";
+import { resolveSecret } from "../config.js";
 
 export interface ServerEntry {
   name: string;
@@ -11,10 +12,10 @@ export function getEnabledServers(config: Config): ServerEntry[] {
   const servers: ServerEntry[] = [];
 
   if (config.github.enabled) {
-    const token = process.env[config.github.token_env];
+    const token = resolveSecret(config.github.token_env);
     if (!token) {
       throw new Error(
-        `GitHub enabled but ${config.github.token_env} not set in environment`
+        `GitHub enabled but token not configured — set ${config.github.token_env} in environment or put the token directly in config`
       );
     }
     servers.push({
@@ -35,10 +36,10 @@ export function getEnabledServers(config: Config): ServerEntry[] {
   }
 
   if (config.slack.enabled) {
-    const token = process.env[config.slack.token_env];
+    const token = resolveSecret(config.slack.token_env);
     if (!token) {
       throw new Error(
-        `Slack enabled but ${config.slack.token_env} not set in environment`
+        `Slack enabled but token not configured — set ${config.slack.token_env} in environment or put the token directly in config`
       );
     }
     servers.push({

@@ -79,12 +79,12 @@ export function loadConfig(): Config {
 const DEFAULT_CONFIG = `[llm]
 provider = "anthropic"
 model = "claude-sonnet-4-5-20250929"
-# Environment variable name that holds your Anthropic API key
+# Anthropic API key — env var name like "ANTHROPIC_API_KEY" or the key directly
 api_key_env = "ANTHROPIC_API_KEY"
 
 [github]
 enabled = true
-# Environment variable name that holds your GitHub personal access token
+# GitHub token — env var name like "GITHUB_TOKEN" or the token directly
 token_env = "GITHUB_TOKEN"
 # GitHub orgs to pull activity from, e.g. ["my-company", "my-oss-org"]
 orgs = []
@@ -96,7 +96,7 @@ url = "https://mcp.atlassian.com/v1/mcp"
 
 [slack]
 enabled = false
-# Environment variable name that holds your Slack bot token
+# Slack token — env var name like "SLACK_BOT_TOKEN" or the token directly
 token_env = "SLACK_BOT_TOKEN"
 # Slack channels to read messages from, e.g. ["#engineering", "#standup"]
 channels = []
@@ -109,6 +109,17 @@ output_dir = "~/.reporter/reports"
 # Number of past reports to include as context for continuity
 memory_depth = 5
 `;
+
+/**
+ * Resolve a secret value: if it looks like an env var name (all caps, underscores),
+ * look it up in process.env. Otherwise treat it as the literal secret value.
+ */
+export function resolveSecret(value: string): string | undefined {
+  if (/^[A-Z_][A-Z0-9_]*$/.test(value)) {
+    return process.env[value];
+  }
+  return value;
+}
 
 export function initConfig(): string {
   mkdirSync(REPORTER_DIR, { recursive: true });

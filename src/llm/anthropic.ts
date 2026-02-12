@@ -8,16 +8,17 @@ import type {
   ToolCall,
 } from "./provider.js";
 import type { Config } from "../config.js";
+import { resolveSecret } from "../config.js";
 
 export class AnthropicProvider implements LLMProvider {
   private client: Anthropic;
   private model: string;
 
   constructor(config: Config) {
-    const apiKey = process.env[config.llm.api_key_env];
+    const apiKey = resolveSecret(config.llm.api_key_env);
     if (!apiKey) {
       throw new Error(
-        `${config.llm.api_key_env} not set in environment`
+        `API key not configured — set ${config.llm.api_key_env} in environment or put the key directly in config`
       );
     }
     this.client = new Anthropic({ apiKey });
