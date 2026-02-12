@@ -19,6 +19,8 @@ import { waitForOAuthCallback } from "./auth/callback.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import Anthropic from "@anthropic-ai/sdk";
+import { readFileSync, writeFileSync } from "fs";
 import { log, error } from "./utils/log.js";
 
 const args = process.argv.slice(2);
@@ -77,9 +79,37 @@ async function cmdInit() {
     Bun.spawn([opener, configPath], { stdio: ["ignore", "ignore", "ignore"] });
   }
 
-  // Check OAuth status and offer login for missing auth
-  const config = loadConfig();
+  // Check LLM API key
+  let config = loadConfig();
+  const existingKey = resolveSecret(config.llm.api_key_env);
+  if (existingKey) {
+    log("LLM: API key found");
+    // Verify it works
+    try {
+      await verifyAnthropicKey(existingKey, config.llm.model);
+      log("LLM: connected");
+    } catch (e) {
+      error(`LLM: connection failed — ${e instanceof Error ? e.message : String(e)}`);
+    }
+  } else {
+    process.stderr.write("\nEnter your Anthropic API key (sk-ant-...): ");
+    const apiKey = (await readLine()).trim();
+    if (apiKey) {
+      try {
+        await verifyAnthropicKey(apiKey, config.llm.model);
+        saveApiKeyToConfig(apiKey);
+        config = loadConfig();
+        log("LLM: connected");
+      } catch (e) {
+        error(`LLM: connection failed — ${e instanceof Error ? e.message : String(e)}`);
+        log("You can update the API key in " + getConfigPath());
+      }
+    } else {
+      log(`Set ANTHROPIC_API_KEY env var or add the key to ${getConfigPath()}`);
+    }
+  }
 
+  // Check OAuth status and offer login for missing auth
   if (!loadStoredGitHubToken() && !config.github.token_env) {
     process.stderr.write("\nLog in to GitHub with OAuth? (Y/n) ");
     const ghAnswer = await readLine();
@@ -111,10 +141,10 @@ async function cmdInit() {
       if (authAnswer.trim().toLowerCase() !== "n") {
         await performSlackOAuth(config.slack.client_id, clientSecret);
       } else {
-        log('Run "reporter auth slack" later to complete Slack setup.');
+        log('Run "contxt auth slack" later to complete Slack setup.');
       }
     } else {
-      log(`Set ${config.slack.client_secret_env} env var, then run "reporter auth slack".`);
+      log(`Set ${config.slack.client_secret_env} env var, then run "contxt auth slack".`);
     }
   } else {
     process.stderr.write("\nSet up Slack with OAuth? (y/N) ");
@@ -144,10 +174,10 @@ async function cmdInit() {
           if (authAnswer.trim().toLowerCase() !== "n") {
             await performSlackOAuth(clientId, clientSecret);
           } else {
-            log('Run "reporter auth slack" later to complete Slack setup.');
+            log('Run "contxt auth slack" later to complete Slack setup.');
           }
         } else {
-          log(`Set ${secretEnv} env var, then run "reporter auth slack".`);
+          log(`Set ${secretEnv} env var, then run "contxt auth slack".`);
         }
       }
     }
@@ -198,10 +228,10 @@ async function cmdAuth() {
       return cmdAuthSlack();
     default:
       console.log(`Usage:
-  reporter auth login     Authenticate with Atlassian (Jira) via browser OAuth
-  reporter auth logout    Remove stored Atlassian tokens
-  reporter auth status    Show Atlassian authentication status
-  reporter auth slack     Authenticate with Slack via browser OAuth`);
+  contxt auth login     Authenticate with Atlassian (Jira) via browser OAuth
+  contxt auth logout    Remove stored Atlassian tokens
+  contxt auth status    Show Atlassian authentication status
+  contxt auth slack     Authenticate with Slack via browser OAuth`);
       process.exit(1);
   }
 }
@@ -210,7 +240,7 @@ const CALLBACK_PORT = 32191;
 
 async function cmdAuthLogin() {
   if (!configExists()) {
-    error(`Config not found. Run "reporter init" first.`);
+    error(`Config not found. Run "contxt init" first.`);
     process.exit(1);
   }
 
@@ -236,7 +266,7 @@ async function cmdAuthLogin() {
   }
 
   // Verify by connecting and listing tools
-  const client = new Client({ name: "reporter", version: "0.1.0" });
+  const client = new Client({ name: "contxt", version: "0.1.0" });
   await client.connect(transport);
   const result = await client.listTools();
   log(`Authenticated — ${result.tools.length} Jira tools available`);
@@ -256,7 +286,7 @@ function cmdAuthStatus() {
   const info = getAtlassianTokenInfo();
   if (!info.hasTokens) {
     console.log("Atlassian: Not authenticated");
-    console.log('  Run "reporter auth login" to authenticate.');
+    console.log('  Run "contxt auth login" to authenticate.');
     return;
   }
   console.log("Atlassian: Authenticated");
@@ -266,7 +296,7 @@ function cmdAuthStatus() {
 
 async function cmdAuthSlack() {
   if (!configExists()) {
-    error(`Config not found. Run "reporter init" first.`);
+    error(`Config not found. Run "contxt init" first.`);
     process.exit(1);
   }
 
@@ -277,7 +307,7 @@ async function cmdAuthSlack() {
       `  1. Create a Slack app at https://api.slack.com/apps\n` +
       `  2. Under "OAuth & Permissions", add redirect URL: http://localhost:8371/callback\n` +
       `  3. Add bot token scopes: channels:history, channels:read, users:read, search:read\n` +
-      `  4. Copy "Client ID" from "Basic Information" into ~/reporter/config.toml under [slack]`
+      `  4. Copy "Client ID" from "Basic Information" into ~/contxt/config.toml under [slack]`
     );
     process.exit(1);
   }
@@ -308,7 +338,7 @@ async function cmdAuthSlack() {
 async function cmdLogin() {
   const service = args[1];
   if (service !== "github") {
-    console.log('Usage: reporter login github');
+    console.log('Usage: contxt login github');
     process.exit(1);
   }
   await loginGitHub();
@@ -317,7 +347,7 @@ async function cmdLogin() {
 async function cmdLogout() {
   const service = args[1];
   if (service !== "github") {
-    console.log('Usage: reporter logout github');
+    console.log('Usage: contxt logout github');
     process.exit(1);
   }
   logoutGitHub();
@@ -325,7 +355,7 @@ async function cmdLogout() {
 
 async function cmdRun() {
   if (!configExists()) {
-    error(`Config not found. Run "reporter init" first.`);
+    error(`Config not found. Run "contxt init" first.`);
     process.exit(1);
   }
 
@@ -384,7 +414,7 @@ async function cmdRun() {
 
 function cmdHistory() {
   if (!configExists()) {
-    error(`Config not found. Run "reporter init" first.`);
+    error(`Config not found. Run "contxt init" first.`);
     process.exit(1);
   }
 
@@ -392,7 +422,7 @@ function cmdHistory() {
   const reports = listReports(config);
 
   if (reports.length === 0) {
-    console.log("No reports yet. Run \"reporter run\" to generate one.");
+    console.log("No reports yet. Run \"contxt run\" to generate one.");
     return;
   }
 
@@ -405,9 +435,9 @@ function cmdHistory() {
 function cmdSchedule() {
   const everyIdx = args.indexOf("--every");
   if (everyIdx === -1 || !args[everyIdx + 1]) {
-    console.log('Usage: reporter schedule --every "9am"');
-    console.log('       reporter schedule --every "*/6h"');
-    console.log('       reporter schedule --every "*/15m"');
+    console.log('Usage: contxt schedule --every "9am"');
+    console.log('       contxt schedule --every "*/6h"');
+    console.log('       contxt schedule --every "*/15m"');
     process.exit(1);
   }
 
@@ -441,29 +471,48 @@ function cmdSchedule() {
 }
 
 function cmdHelp() {
-  console.log(`reporter — AI-powered daily work report generator
+  console.log(`contxt — AI-powered daily work report generator
 
 Commands:
-  reporter init                    Create config at ~/reporter/config.toml
-  reporter auth login              Authenticate with Atlassian (Jira) via browser OAuth
-  reporter auth logout             Remove stored Atlassian tokens
-  reporter auth status             Show Atlassian authentication status
-  reporter auth slack              Authenticate with Slack via browser OAuth
-  reporter login github            Authenticate with GitHub via browser OAuth
-  reporter logout github           Remove stored GitHub token
-  reporter run                     Generate report (stdout)
-  reporter run --dry               List available tools, skip LLM
-  reporter run --no-save           Don't save report to disk
-  reporter history                 List past reports
-  reporter schedule --every "9am"  Show crontab entry for scheduling
-  reporter schedule --every "*/15m" Every N minutes
-  reporter schedule --every "*/6h"  Every N hours
+  contxt init                    Create config at ~/contxt/config.toml
+  contxt auth login              Authenticate with Atlassian (Jira) via browser OAuth
+  contxt auth logout             Remove stored Atlassian tokens
+  contxt auth status             Show Atlassian authentication status
+  contxt auth slack              Authenticate with Slack via browser OAuth
+  contxt login github            Authenticate with GitHub via browser OAuth
+  contxt logout github           Remove stored GitHub token
+  contxt run                     Generate report (stdout)
+  contxt run --dry               List available tools, skip LLM
+  contxt run --no-save           Don't save report to disk
+  contxt history                 List past reports
+  contxt schedule --every "9am"  Show crontab entry for scheduling
+  contxt schedule --every "*/15m" Every N minutes
+  contxt schedule --every "*/6h"  Every N hours
 
 Environment:
   ANTHROPIC_API_KEY    Claude API key
-  GITHUB_TOKEN         GitHub token (optional if using "reporter login github")
-  SLACK_BOT_TOKEN      Slack bot token (optional if using "reporter auth slack")
-  REPORTER_DEBUG       Set to 1 for debug logging`);
+  GITHUB_TOKEN         GitHub token (optional if using "contxt login github")
+  SLACK_BOT_TOKEN      Slack bot token (optional if using "contxt auth slack")
+  CONTXT_DEBUG       Set to 1 for debug logging`);
+}
+
+async function verifyAnthropicKey(apiKey: string, model: string): Promise<void> {
+  const client = new Anthropic({ apiKey });
+  await client.messages.create({
+    model,
+    max_tokens: 16,
+    messages: [{ role: "user", content: "Say ok" }],
+  });
+}
+
+function saveApiKeyToConfig(apiKey: string): void {
+  const configPath = getConfigPath();
+  const raw = readFileSync(configPath, "utf-8");
+  const updated = raw.replace(
+    /api_key_env\s*=\s*"[^"]*"/,
+    `api_key_env = "${apiKey}"`
+  );
+  writeFileSync(configPath, updated);
 }
 
 main().catch((e) => {

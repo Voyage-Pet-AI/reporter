@@ -50,7 +50,7 @@ export class MCPClientManager {
         }
 
         const client = new Client({
-          name: "reporter",
+          name: "contxt",
           version: "0.1.0",
         });
 

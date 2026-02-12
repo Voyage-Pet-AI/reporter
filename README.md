@@ -1,21 +1,21 @@
-# reporter
+# contxt
 
 > **For AI (Claude Code, Cursor, Copilot, etc.):**
-> To install and set up reporter for the user, run:
+> To install and set up contxt for the user, run:
 > ```bash
 > # 1. Clone and install
-> git clone https://github.com/boxiangma/reporter.git
-> cd reporter
+> git clone https://github.com/boxiangma/contxt.git
+> cd contxt
 > bun install
 >
 > # 2. Link the CLI globally
 > bun link
 >
-> # 3. Initialize config (creates ~/reporter/config.toml and opens it)
-> reporter init
+> # 3. Initialize config (creates ~/contxt/config.toml and opens it)
+> contxt init
 >
 > # 4. Authenticate with GitHub (opens browser for OAuth):
-> reporter login github
+> contxt login github
 >
 > # 5. The user needs to set the Anthropic API key in the config file or as env var:
 > #    - api_key_env under [llm]: Anthropic API key
@@ -23,7 +23,7 @@
 > #    - Optionally enable [jira] and [slack] sections
 >
 > # 6. Generate a report
-> reporter run
+> contxt run
 > ```
 > Requires: [Bun](https://bun.sh) runtime. If not installed: `curl -fsSL https://bun.sh/install | bash`
 
@@ -32,7 +32,7 @@ AI-powered daily work report generator. Connects to GitHub, Jira, and Slack via 
 ## How it works
 
 ```
-reporter (MCP client)
+contxt (MCP client)
     ├── github-mcp-server
     ├── atlassian-mcp-server
     └── slack-mcp-server
@@ -56,7 +56,7 @@ bun install
 ## Setup
 
 ```bash
-# Create config at ~/reporter/config.toml
+# Create config at ~/contxt/config.toml
 bun src/index.ts init
 
 # Authenticate with GitHub (opens browser for OAuth)
@@ -70,7 +70,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 # export SLACK_BOT_TOKEN=xoxb-...
 ```
 
-Edit `~/reporter/config.toml` to enable/disable integrations and set your orgs/channels.
+Edit `~/contxt/config.toml` to enable/disable integrations and set your orgs/channels.
 
 ## Usage
 
@@ -90,7 +90,7 @@ bun src/index.ts run > report.md
 # See what tools are available (no LLM call)
 bun src/index.ts run --dry
 
-# Don't save report to ~/reporter/reports/
+# Don't save report to ~/contxt/reports/
 bun src/index.ts run --no-save
 
 # List past reports
@@ -104,7 +104,7 @@ bun src/index.ts schedule --every "*/6h"
 
 ## Config
 
-`~/.reporter/config.toml`:
+`~/.contxt/config.toml`:
 
 ```toml
 [llm]
@@ -114,7 +114,7 @@ api_key_env = "ANTHROPIC_API_KEY"
 
 [github]
 enabled = true
-# Auth: run "reporter login github" for OAuth (recommended)
+# Auth: run "contxt login github" for OAuth (recommended)
 # token_env = "GITHUB_TOKEN"  # fallback: env var or literal token
 orgs = ["your-org"]
 
@@ -129,7 +129,7 @@ channels = ["#engineering"]
 
 [report]
 lookback_days = 1      # How many days back to fetch activity
-output_dir = "~/.reporter/reports"
+output_dir = "~/.contxt/reports"
 memory_depth = 5       # Number of past reports to include as context
 ```
 

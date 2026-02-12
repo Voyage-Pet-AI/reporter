@@ -2,7 +2,7 @@
   "lockfileVersion": 1,
   "workspaces": {
     "": {
-      "name": "reporter",
+      "name": "contxt",
       "dependencies": {
         "@anthropic-ai/sdk": "^0.74.0",
         "@modelcontextprotocol/sdk": "^1.26.0",
