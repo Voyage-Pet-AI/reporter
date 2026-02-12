@@ -40,7 +40,7 @@ export interface Config {
   report: ReportConfig;
 }
 
-const REPORTER_DIR = join(homedir(), ".reporter");
+const REPORTER_DIR = join(homedir(), "reporter");
 const CONFIG_PATH = join(REPORTER_DIR, "config.toml");
 
 export function getReporterDir(): string {
@@ -105,7 +105,7 @@ channels = []
 # How many days back to look for activity (1 = daily, 7 = weekly)
 lookback_days = 1
 # Where to save generated reports
-output_dir = "~/.reporter/reports"
+output_dir = "~/reporter/reports"
 # Number of past reports to include as context for continuity
 memory_depth = 5
 `;
