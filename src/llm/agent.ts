@@ -1,0 +1,51 @@
+import type { LLMProvider, Message, LLMTool } from "./provider.js";
+import type { MCPClientManager } from "../mcp/client.js";
+import { log, error, debug } from "../utils/log.js";
+
+const MAX_ITERATIONS = 20;
+
+export async function runAgent(
+  provider: LLMProvider,
+  mcpClient: MCPClientManager,
+  systemPrompt: string,
+  userMessage: string
+): Promise<string> {
+  const tools: LLMTool[] = mcpClient.getAllTools();
+  const messages: Message[] = [{ role: "user", content: userMessage }];
+
+  for (let i = 0; i < MAX_ITERATIONS; i++) {
+    debug(`Iteration ${i + 1}/${MAX_ITERATIONS}`);
+
+    const response = await provider.chat(systemPrompt, messages, tools);
+
+    if (response.stop_reason === "end_turn" || response.tool_calls.length === 0) {
+      return response.text;
+    }
+
+    // Model wants to call tools — execute them
+    messages.push(provider.makeAssistantMessage(response));
+
+    const results = await Promise.all(
+      response.tool_calls.map(async (tc) => {
+        log(`Calling tool: ${tc.name}`);
+        try {
+          const result = await mcpClient.callTool(tc.name, tc.input);
+          const text =
+            typeof result === "string"
+              ? result
+              : JSON.stringify(result, null, 2);
+          return { tool_use_id: tc.id, content: text };
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          error(`Tool ${tc.name} failed: ${msg}`);
+          return { tool_use_id: tc.id, content: `Error: ${msg}`, is_error: true };
+        }
+      })
+    );
+
+    messages.push(provider.makeToolResultMessage(results));
+  }
+
+  error("Max iterations reached");
+  return "Report generation stopped: too many tool calls. Partial results may be incomplete.";
+}

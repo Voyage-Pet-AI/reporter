@@ -1,0 +1,99 @@
+import Anthropic from "@anthropic-ai/sdk";
+import type {
+  LLMProvider,
+  LLMTool,
+  LLMResponse,
+  Message,
+  ToolResult,
+  ToolCall,
+} from "./provider.js";
+import type { Config } from "../config.js";
+
+export class AnthropicProvider implements LLMProvider {
+  private client: Anthropic;
+  private model: string;
+
+  constructor(config: Config) {
+    const apiKey = process.env[config.llm.api_key_env];
+    if (!apiKey) {
+      throw new Error(
+        `${config.llm.api_key_env} not set in environment`
+      );
+    }
+    this.client = new Anthropic({ apiKey });
+    this.model = config.llm.model;
+  }
+
+  async chat(
+    systemPrompt: string,
+    messages: Message[],
+    tools: LLMTool[]
+  ): Promise<LLMResponse> {
+    const anthropicTools: Anthropic.Tool[] = tools.map((t) => ({
+      name: t.name,
+      description: t.description ?? "",
+      input_schema: t.input_schema as Anthropic.Tool.InputSchema,
+    }));
+
+    const response = await this.client.messages.create({
+      model: this.model,
+      max_tokens: 16384,
+      system: systemPrompt,
+      messages: messages as Anthropic.MessageParam[],
+      tools: anthropicTools,
+    });
+
+    // Extract text and tool calls from response
+    let text = "";
+    const toolCalls: ToolCall[] = [];
+
+    for (const block of response.content) {
+      if (block.type === "text") {
+        text += block.text;
+      } else if (block.type === "tool_use") {
+        toolCalls.push({
+          id: block.id,
+          name: block.name,
+          input: block.input as Record<string, unknown>,
+        });
+      }
+    }
+
+    return {
+      stop_reason: response.stop_reason ?? "end_turn",
+      text,
+      tool_calls: toolCalls,
+    };
+  }
+
+  makeAssistantMessage(response: LLMResponse): Message {
+    const content: Anthropic.ContentBlockParam[] = [];
+
+    if (response.text) {
+      content.push({ type: "text" as const, text: response.text });
+    }
+
+    for (const tc of response.tool_calls) {
+      content.push({
+        type: "tool_use" as const,
+        id: tc.id,
+        name: tc.name,
+        input: tc.input,
+      });
+    }
+
+    return { role: "assistant", content };
+  }
+
+  makeToolResultMessage(results: ToolResult[]): Message {
+    return {
+      role: "user",
+      content: results.map((r) => ({
+        type: "tool_result" as const,
+        tool_use_id: r.tool_use_id,
+        content: r.content,
+        is_error: r.is_error ?? false,
+      })),
+    };
+  }
+}
