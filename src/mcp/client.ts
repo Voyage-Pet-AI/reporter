@@ -18,6 +18,11 @@ interface ConnectedServer {
 
 export class MCPClientManager {
   private servers: ConnectedServer[] = [];
+  private githubOrgs: string[];
+
+  constructor(githubOrgs: string[] = []) {
+    this.githubOrgs = githubOrgs;
+  }
 
   async connect(entries: ServerEntry[]): Promise<void> {
     for (const entry of entries) {
@@ -73,6 +78,19 @@ export class MCPClientManager {
 
     const server = this.servers.find((s) => s.name === serverName);
     if (!server) throw new Error(`No server connected for: ${serverName}`);
+
+    // Inject org: qualifiers into GitHub search queries
+    if (
+      serverName === "github" &&
+      toolName === "search_issues" &&
+      this.githubOrgs.length > 0
+    ) {
+      const q = args.q as string | undefined;
+      if (q && !q.includes("org:")) {
+        const orgFilter = this.githubOrgs.map((o) => `org:${o}`).join(" ");
+        args = { ...args, q: `${orgFilter} ${q}` };
+      }
+    }
 
     debug(`Calling ${serverName}/${toolName} with ${JSON.stringify(args)}`);
 

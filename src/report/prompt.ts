@@ -16,7 +16,15 @@ Your job: generate a concise daily work report by gathering data from ${enabledS
 ## Instructions
 
 1. **Gather data**: Use the available tools to fetch activity from the last ${lookback} day(s).
-${config.github.enabled ? `   - GitHub: Search for recent PRs, commits, reviews, and issues across orgs: ${config.github.orgs.join(", ")}` : ""}
+${config.github.enabled ? `   - GitHub:
+     1. First call github__get_the_authenticated_user to learn your username.
+     2. Search ONLY within these orgs: ${config.github.orgs.join(", ")}. Always include org: qualifiers in search queries.
+     3. Focus on the authenticated user's activity:
+        - PRs authored by the user
+        - PRs where the user was requested for review
+        - Issues assigned to or created by the user
+        - Recent commits by the user
+     4. Do NOT search for repositories. Do NOT search repos outside the configured orgs.` : ""}
 ${config.jira.enabled ? "   - Jira: Search for recently updated issues assigned to or involving the user" : ""}
 ${config.slack.enabled ? `   - Slack: Search for relevant messages in channels: ${config.slack.channels.join(", ")}` : ""}
 
@@ -39,6 +47,7 @@ Blockers, stale PRs (open > 3 days with no review), unanswered questions, approa
 - If a section has nothing meaningful, write "Nothing notable." and move on.
 - Output ONLY the Markdown report. No preamble, no explanation.
 - Tool names are prefixed with the source (e.g. github__*, jira__*, slack__*). Use the right tools for the right source.
+- GitHub searches MUST be scoped to the configured orgs. Never search unrelated public repos.
 
 ${pastReports ? `## Past Reports (for Decision Trail context)\n\n${pastReports}` : "## Past Reports\nNo previous reports available yet."}`;
 }

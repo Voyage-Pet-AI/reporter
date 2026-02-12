@@ -47,7 +47,7 @@ async function cmdRun() {
     process.exit(1);
   }
 
-  const mcpClient = new MCPClientManager();
+  const mcpClient = new MCPClientManager(config.github.orgs ?? []);
 
   try {
     await mcpClient.connect(servers);

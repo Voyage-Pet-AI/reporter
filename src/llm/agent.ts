@@ -1,8 +1,25 @@
 import type { LLMProvider, Message, LLMTool } from "./provider.js";
-import type { MCPClientManager } from "../mcp/client.js";
+import type { MCPClientManager, MCPTool } from "../mcp/client.js";
 import { log, error, debug } from "../utils/log.js";
 
 const MAX_ITERATIONS = 20;
+
+/** GitHub tools allowed for report generation (read-only, report-relevant). */
+const GITHUB_TOOL_WHITELIST = new Set([
+  "github__get_the_authenticated_user",
+  "github__search_issues",
+  "github__get_pull_request",
+  "github__list_commits",
+  "github__get_issue",
+  "github__list_pull_requests_for_repo",
+]);
+
+function filterTools(tools: MCPTool[]): MCPTool[] {
+  return tools.filter((t) => {
+    if (!t.name.startsWith("github__")) return true;
+    return GITHUB_TOOL_WHITELIST.has(t.name);
+  });
+}
 
 export async function runAgent(
   provider: LLMProvider,
@@ -10,7 +27,7 @@ export async function runAgent(
   systemPrompt: string,
   userMessage: string
 ): Promise<string> {
-  const tools: LLMTool[] = mcpClient.getAllTools();
+  const tools: LLMTool[] = filterTools(mcpClient.getAllTools());
   const messages: Message[] = [{ role: "user", content: userMessage }];
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
