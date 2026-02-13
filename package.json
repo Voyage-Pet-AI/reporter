@@ -10,7 +10,7 @@
     "start": "bun src/index.ts",
     "build": "bun build src/index.ts --outdir dist --target bun",
     "link": "bun link",
-    "version": "bun run build && git add -A && git commit -m \"v$(node -p \"require('./package.json').version\")\" && git tag v$(node -p \"require('./package.json').version\")"
+    "publish": "bash scripts/publish.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",
