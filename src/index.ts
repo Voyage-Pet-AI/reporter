@@ -20,6 +20,8 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { loadMCPConfig, saveMCPConfig, mcpConfigToServers, getMCPConfigPath, type MCPServerDef } from "./mcp/config.js";
+import { MCP_CATALOG, type CatalogEntry } from "./mcp/catalog.js";
+import { multiselect, cancelSymbol, type MultiselectItem } from "./prompts/multiselect.js";
 import { log, error } from "./utils/log.js";
 
 const args = process.argv.slice(2);
@@ -154,6 +156,87 @@ async function cmdInit() {
         }
       }
     }
+  }
+
+  // MCP server catalog
+  await promptMCPCatalog();
+}
+
+async function promptMCPCatalog() {
+  const existingConfig = loadMCPConfig();
+  const existingNames = new Set(Object.keys(existingConfig.mcpServers));
+
+  const available = MCP_CATALOG.filter((e) => !existingNames.has(e.name));
+  if (available.length === 0) return;
+
+  process.stderr.write("\n");
+  const items: MultiselectItem<CatalogEntry>[] = available.map((entry) => ({
+    value: entry,
+    label: entry.label,
+    hint: entry.description,
+  }));
+
+  const result = await multiselect<CatalogEntry>({
+    message: "Add MCP servers?",
+    items,
+  });
+
+  if (result === cancelSymbol || (Array.isArray(result) && result.length === 0)) {
+    return;
+  }
+
+  const selectedEntries = result as CatalogEntry[];
+  const mcpConfig = loadMCPConfig();
+  let addedCount = 0;
+
+  for (const entry of selectedEntries) {
+    const def: MCPServerDef = {
+      type: entry.type,
+      command: entry.command,
+      args: [...entry.args],
+    };
+
+    let skip = false;
+
+    if (entry.prompts) {
+      const env: Record<string, string> = {};
+
+      for (const prompt of entry.prompts) {
+        process.stderr.write(
+          `  ${entry.label} — ${prompt.message}${prompt.placeholder ? ` (e.g. ${prompt.placeholder})` : ""}: `,
+        );
+        const value = (await readLine()).trim();
+
+        if (prompt.required && !value) {
+          error(`Required value missing. Skipping ${entry.label}.`);
+          skip = true;
+          break;
+        }
+
+        if (value) {
+          if (prompt.key === "args") {
+            def.args!.push(value);
+          } else if (prompt.key.startsWith("env.")) {
+            const envKey = prompt.key.slice(4);
+            env[envKey] = value;
+          }
+        }
+      }
+
+      if (skip) continue;
+      if (Object.keys(env).length > 0) {
+        def.env = env;
+      }
+    }
+
+    mcpConfig.mcpServers[entry.name] = def;
+    log(`Added ${entry.label}`);
+    addedCount++;
+  }
+
+  if (addedCount > 0) {
+    saveMCPConfig(mcpConfig);
+    log(`Saved ${addedCount} MCP server${addedCount > 1 ? "s" : ""} to ${getMCPConfigPath()}`);
   }
 }
 
