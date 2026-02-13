@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - run: bun install
+
+      - run: bun run build
+
+      - name: Package tarball
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p staging
+          cp dist/index.js staging/reporter.js
+          cp package.json README.md staging/
+          tar -czf "reporter-${VERSION}.tar.gz" -C staging .
+
+      - name: Compute SHA256
+        id: sha
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          SHA=$(shasum -a 256 "reporter-${VERSION}.tar.gz" | awk '{print $1}')
+          echo "sha256=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: reporter-*.tar.gz
+          generate_release_notes: true
+
+      - name: Dispatch tap update
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+          repository: Voyage-Pet-AI/homebrew-tap
+          event-type: update-formula
+          client-payload: |
+            {
+              "version": "${{ steps.sha.outputs.version }}",
+              "sha256": "${{ steps.sha.outputs.sha256 }}"
+            }
