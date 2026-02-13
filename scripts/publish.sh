@@ -18,13 +18,14 @@ fi
 
 echo "Publishing v${NEW_VERSION}..."
 
-# Update version in package.json
+# Update version in package.json and src/index.ts
 node -e "
 const fs = require('fs');
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 pkg.version = '${NEW_VERSION}';
 fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
 "
+sed -i '' "s/^const VERSION = \".*\";$/const VERSION = \"${NEW_VERSION}\";/" src/index.ts
 
 bun install --frozen-lockfile 2>/dev/null || true
 bun run build
@@ -34,4 +35,4 @@ git commit -m "v${NEW_VERSION}"
 git tag "v${NEW_VERSION}"
 git push origin main --tags
 
-echo "Done. v${NEW_VERSION} released — GitHub Actions will handle the rest."
+echo "Done. v${NEW_VERSION} released — Use github command to the rest."

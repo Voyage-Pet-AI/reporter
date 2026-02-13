@@ -30,7 +30,7 @@ import { multiselect, cancelSymbol, type MultiselectItem } from "./prompts/multi
 import { log, error } from "./utils/log.js";
 import { readLine } from "./utils/readline.js";
 
-const VERSION = "0.1.1";
+const VERSION = "0.1.2";
 
 const args = process.argv.slice(2);
 const command = args[0] ?? "help";
