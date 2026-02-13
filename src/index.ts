@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { loadConfig, initConfig, configExists, getConfigPath, resolveSecret, updateSlackConfig, type SlackOAuthInit } from "./config.js";
+import { loadConfig, initConfig, configExists, getConfigPath, resolveSecret, updateSlackConfig, type SlackInitConfig } from "./config.js";
 import { getEnabledServers } from "./mcp/registry.js";
 import { MCPClientManager } from "./mcp/client.js";
 import { AnthropicProvider } from "./llm/anthropic.js";
@@ -14,7 +14,7 @@ import {
   hasAnthropicAuth,
 } from "./auth/anthropic.js";
 import { getSlackToken } from "./auth/tokens.js";
-import { performSlackOAuth } from "./auth/slack.js";
+import { promptSlackToken } from "./auth/slack.js";
 import {
   AtlassianOAuthProvider,
   hasAtlassianAuth,
@@ -165,34 +165,17 @@ async function handleBuiltinSetup(entry: CatalogEntry, _config: ReturnType<typeo
       await cmdAuthLogin();
       break;
     case "slack": {
-      printSlackSetupGuide();
-
-      process.stderr.write("  Slack app client ID: ");
-      const clientId = (await readLine()).trim();
-      if (!clientId) {
-        error("Client ID is required. Skipping Slack setup.");
-        break;
-      }
-
-      process.stderr.write("  Client secret env var [SLACK_CLIENT_SECRET]: ");
-      const secretEnv = (await readLine()).trim() || "SLACK_CLIENT_SECRET";
-
       process.stderr.write("  Channels (comma-separated, e.g. #general, #eng): ");
       const channelsRaw = (await readLine()).trim();
       const channels = channelsRaw
         ? channelsRaw.split(",").map((c) => c.trim()).filter(Boolean)
         : [];
 
-      const slackInit: SlackOAuthInit = { client_id: clientId, client_secret_env: secretEnv, channels };
+      const slackInit: SlackInitConfig = { channels };
       updateSlackConfig(slackInit);
       log("Slack config saved.");
 
-      const clientSecret = resolveSecret(secretEnv);
-      if (clientSecret) {
-        await performSlackOAuth(clientId, clientSecret);
-      } else {
-        log(`Set ${secretEnv} env var, then run "reporter auth slack".`);
-      }
+      await promptSlackToken();
       break;
     }
   }
@@ -239,17 +222,6 @@ async function handleCatalogSetup(entry: CatalogEntry, mcpConfig: ReturnType<typ
   return true;
 }
 
-function printSlackSetupGuide() {
-  console.error(
-    `\n  To get your Slack credentials:\n` +
-    `  1. Create a Slack app at https://api.slack.com/apps → "Create New App"\n` +
-    `  2. Go to "OAuth & Permissions" → add redirect URL: http://localhost:8371/callback\n` +
-    `  3. Under "Scopes" → "Bot Token Scopes", add: channels:history, channels:read, users:read, search:read\n` +
-    `  4. Go to "Basic Information" → copy "Client ID" and "Client Secret"\n` +
-    `  5. Set the secret as an env var: export SLACK_CLIENT_SECRET="your-secret"\n`
-  );
-}
-
 
 async function cmdAuth() {
   const subcommand = args[1];
@@ -268,7 +240,7 @@ async function cmdAuth() {
   reporter auth login     Authenticate with Atlassian (Jira) via browser OAuth
   reporter auth logout    Remove stored Atlassian tokens
   reporter auth status    Show Atlassian authentication status
-  reporter auth slack     Authenticate with Slack via browser OAuth`);
+  reporter auth slack     Authenticate with Slack via bot token`);
       process.exit(1);
   }
 }
@@ -337,39 +309,7 @@ async function cmdAuthSlack() {
     process.exit(1);
   }
 
-  const config = loadConfig();
-  if (!config.slack.client_id) {
-    error(
-      `Missing client_id in [slack] config.\n` +
-      `  1. Create a Slack app at https://api.slack.com/apps\n` +
-      `  2. Under "OAuth & Permissions", add redirect URL: http://localhost:8371/callback\n` +
-      `  3. Add bot token scopes: channels:history, channels:read, users:read, search:read\n` +
-      `  4. Copy "Client ID" from "Basic Information" into ~/reporter/config.toml under [slack]`
-    );
-    process.exit(1);
-  }
-
-  if (!config.slack.client_secret_env) {
-    error(
-      `Missing client_secret_env in [slack] config.\n` +
-      `  1. Copy "Client Secret" from your app's "Basic Information" page:\n` +
-      `     https://api.slack.com/apps\n` +
-      `  2. Set it as an env var: export SLACK_CLIENT_SECRET="xoxe-..."\n` +
-      `  3. Add client_secret_env = "SLACK_CLIENT_SECRET" to [slack] in config`
-    );
-    process.exit(1);
-  }
-
-  const clientSecret = resolveSecret(config.slack.client_secret_env);
-  if (!clientSecret) {
-    error(
-      `Could not resolve Slack client secret from "${config.slack.client_secret_env}".\n` +
-      `  Set the ${config.slack.client_secret_env} environment variable.`
-    );
-    process.exit(1);
-  }
-
-  await performSlackOAuth(config.slack.client_id, clientSecret);
+  await promptSlackToken();
 }
 
 async function cmdLogin() {
@@ -681,7 +621,7 @@ Commands:
   reporter auth login                  Authenticate with Atlassian (Jira) via browser OAuth
   reporter auth logout                 Remove stored Atlassian tokens
   reporter auth status                 Show Atlassian authentication status
-  reporter auth slack                  Authenticate with Slack via browser OAuth
+  reporter auth slack                  Authenticate with Slack via bot token
   reporter run                         Generate report (stdout)
   reporter run --dry                   List available tools, skip LLM
   reporter run --no-save               Don't save report to disk

@@ -24,8 +24,6 @@ export interface JiraConfig {
 export interface SlackConfig {
   enabled: boolean;
   token_env?: string;
-  client_id?: string;
-  client_secret_env?: string;
   channels: string[];
 }
 
@@ -101,10 +99,8 @@ url = "https://mcp.atlassian.com/v1/mcp"
 
 [slack]
 enabled = false
-# Option 1 (recommended): OAuth — run "reporter auth slack" for browser-based login
-# client_id = "your-slack-app-client-id"
-# client_secret_env = "SLACK_CLIENT_SECRET"
-# Option 2: Manual token — env var name like "SLACK_BOT_TOKEN" or the token directly
+# Auth: run "reporter auth slack" to paste your Bot User OAuth Token (recommended)
+# Or set a token manually — env var name like "SLACK_BOT_TOKEN" or the token directly
 # token_env = "SLACK_BOT_TOKEN"
 # Slack channels to read messages from, e.g. ["#engineering", "#standup"]
 channels = []
@@ -146,13 +142,11 @@ export function resolveGitHubToken(config: Config): string | undefined {
   return undefined;
 }
 
-export interface SlackOAuthInit {
-  client_id: string;
-  client_secret_env: string;
+export interface SlackInitConfig {
   channels: string[];
 }
 
-export function initConfig(slackOAuth?: SlackOAuthInit): string {
+export function initConfig(): string {
   mkdirSync(REPORTER_DIR, { recursive: true });
   mkdirSync(join(REPORTER_DIR, "reports"), { recursive: true });
   mkdirSync(join(REPORTER_DIR, "auth"), { recursive: true });
@@ -161,25 +155,16 @@ export function initConfig(slackOAuth?: SlackOAuthInit): string {
     return `Config already exists at ${CONFIG_PATH}`;
   }
 
-  let config = DEFAULT_CONFIG;
-  if (slackOAuth) {
-    const channelsStr = JSON.stringify(slackOAuth.channels);
-    config = config.replace(
-      /\[slack\][\s\S]*?\n\n/,
-      `[slack]\nenabled = true\nclient_id = "${slackOAuth.client_id}"\nclient_secret_env = "${slackOAuth.client_secret_env}"\nchannels = ${channelsStr}\n\n`
-    );
-  }
-
-  writeFileSync(CONFIG_PATH, config);
+  writeFileSync(CONFIG_PATH, DEFAULT_CONFIG);
   return `Config created at ${CONFIG_PATH}\nEdit it to add your API keys and preferences.`;
 }
 
-export function updateSlackConfig(slack: SlackOAuthInit): void {
+export function updateSlackConfig(slack: SlackInitConfig): void {
   const raw = readFileSync(CONFIG_PATH, "utf-8");
   const channelsStr = JSON.stringify(slack.channels);
   const updated = raw.replace(
     /\[slack\][\s\S]*?(?=\n\[|$)/,
-    `[slack]\nenabled = true\nclient_id = "${slack.client_id}"\nclient_secret_env = "${slack.client_secret_env}"\nchannels = ${channelsStr}\n`
+    `[slack]\nenabled = true\nchannels = ${channelsStr}\n`
   );
   writeFileSync(CONFIG_PATH, updated);
 }

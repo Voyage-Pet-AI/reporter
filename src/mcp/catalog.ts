@@ -35,24 +35,6 @@ export const MCP_CATALOG: CatalogEntry[] = [
     label: "Slack",
     description: "Channel messages and threads",
     builtin: true,
-    prompts: [
-      {
-        key: "slack.client_id",
-        message: "Slack app client ID",
-        required: true,
-      },
-      {
-        key: "slack.client_secret_env",
-        message: "Client secret env var",
-        required: false,
-        placeholder: "SLACK_CLIENT_SECRET",
-      },
-      {
-        key: "slack.channels",
-        message: "Channels (comma-separated, e.g. #general, #eng)",
-        required: false,
-      },
-    ],
   },
   {
     name: "filesystem",

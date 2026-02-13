@@ -61,7 +61,7 @@ export function getEnabledServers(config: Config): ServerEntry[] {
       : getSlackToken();
     if (!token) {
       throw new Error(
-        `Slack enabled but token not configured — run "reporter auth slack" for OAuth or set token_env in config`
+        `Slack enabled but token not configured — run "reporter auth slack" or set token_env in config`
       );
     }
     servers.push({
